@@ -54,3 +54,4 @@ class Comment:
     content: str = ""
     create_time: int = 0
     tid: str = ""
+    replies: list["Comment"] = field(default_factory=list)

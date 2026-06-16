@@ -42,16 +42,29 @@ class QzoneParser:
         return self._parse_comments(commentlist)
 
     def _parse_comments(self, raw: list[dict]) -> list[Comment]:
-        return [
-            Comment(
+        result = []
+        for c in raw:
+            if not c:
+                continue
+            main = Comment(
                 uin=int(c.get("uin", 0) or 0),
                 nickname=str(c.get("nickname", "") or ""),
                 content=str(c.get("content", "") or ""),
                 create_time=int(c.get("create_time", 0) or 0),
                 tid=str(c.get("tid", "") or ""),
             )
-            for c in raw if c
-        ]
+            # list_3 = 楼中楼回复
+            for sub in c.get("list_3") or []:
+                if sub:
+                    main.replies.append(Comment(
+                        uin=int(sub.get("uin", 0) or 0),
+                        nickname=str(sub.get("nickname", "") or ""),
+                        content=str(sub.get("content", "") or ""),
+                        create_time=int(sub.get("create_time", 0) or 0),
+                        tid=str(sub.get("tid", "") or ""),
+                    ))
+            result.append(main)
+        return result
 
     @staticmethod
     def _extract_images(item: dict) -> list[str]:
