@@ -95,14 +95,30 @@ class _LoginExpired(Exception):
 
 
 async def _parse_json(text: str) -> dict:
-    """解析 JSON / JSONP / 非标准 JSON（QZone 的 JS 对象字面量）。"""
+    """解析 JSON / JSONP / 非标准 JSON（QZone 返回 HTML 包裹的 JSON）。"""
     s = text.strip()
-    # JSONP: callback({...})
-    if s.startswith("_Callback(") or s.endswith("})"):
-        start = s.find("(")
-        end = s.rfind(")")
-        if start != -1 and end != -1:
-            s = s[start + 1:end]
+    # JSONP / frameElement.callback({...})
+    for marker in ("_Callback(", "frameElement.callback("):
+        idx = s.find(marker)
+        if idx != -1:
+            start = idx + len(marker)
+            end = s.rfind(")")
+            if end > start:
+                s = s[start:end]
+                break
+    # HTML + JSON 混合，提取从首个 { 到最外层 }
+    brace_start = s.find("{")
+    if brace_start != -1:
+        depth = 0
+        for i in range(brace_start, len(s)):
+            ch = s[i]
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    s = s[brace_start:i + 1]
+                    break
     # QZone 偶有无引号 key 和单引号，先尝试标准 json，失败用 json5
     import json as stdjson
     try:
