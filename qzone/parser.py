@@ -35,7 +35,7 @@ class QzoneParser:
             create_time=int(item.get("created_time", 0) or 0),
             images=self._extract_images(item),
             videos=self._extract_videos(item),
-            comments=self._parse_comments(item.get("commentlist", [])),
+            comments=self._parse_comments(item.get("commentlist") or []),
         )
 
     def parse_comments(self, commentlist: list[dict]) -> list[Comment]:

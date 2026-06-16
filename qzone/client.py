@@ -47,10 +47,9 @@ class QzoneHttpClient:
         headers: Optional[dict] = None,
         timeout: Optional[int] = None,
     ) -> dict:
-        """发起请求，自动带 cookie header。过期时最多重试 2 次。"""
+        """发起请求，自动带 cookie（原样传给 aiohttp cookies 参数）。过期重试 2 次。"""
         ctx = self._session.get_ctx()
-        req_headers = {"User-Agent": _UA}
-        req_headers.update(ctx.cookies)
+        req_headers = dict(ctx.headers)
         if headers:
             req_headers.update(headers)
 
@@ -64,6 +63,7 @@ class QzoneHttpClient:
                     params=params,
                     data=data,
                     headers=req_headers,
+                    cookies=ctx.cookies,
                     timeout=aiohttp.ClientTimeout(total=timeout or self._timeout),
                 ) as resp:
                     text = await resp.text()
@@ -95,7 +95,7 @@ class _LoginExpired(Exception):
 
 
 async def _parse_json(text: str) -> dict:
-    """解析 JSON 或 JSONP 响应。"""
+    """解析 JSON / JSONP / 非标准 JSON（QZone 的 JS 对象字面量）。"""
     s = text.strip()
     # JSONP: callback({...})
     if s.startswith("_Callback(") or s.endswith("})"):
@@ -103,21 +103,15 @@ async def _parse_json(text: str) -> dict:
         end = s.rfind(")")
         if start != -1 and end != -1:
             s = s[start + 1:end]
-    import json
-    # 修复 JSON5 遗留逗号
-    s = _strip_trailing_commas(s)
-    return json.loads(s)
+    # QZone 偶有无引号 key 和单引号，先尝试标准 json，失败用 json5
+    import json as stdjson
+    try:
+        return stdjson.loads(s)
+    except stdjson.JSONDecodeError:
+        pass
+    # json5 不认识 JS undefined，先替换
+    s = s.replace("undefined", "null")
+    import json5
+    return json5.loads(s)
 
 
-def _strip_trailing_commas(s: str) -> str:
-    """去掉 JSON 对象/数组最后一个元素后的逗号（QZone 经常返回）。"""
-    import re
-    s = re.sub(r',\s*([}\]])', r'\1', s)
-    return s
-
-
-_UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/138.0.0.0 Safari/537.36"
-)

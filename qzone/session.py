@@ -10,7 +10,7 @@ from typing import Optional
 
 @dataclass
 class QzoneContext:
-    uin: str
+    uin: int
     skey: str
     p_skey: str
 
@@ -21,7 +21,20 @@ class QzoneContext:
 
     @property
     def cookies(self) -> dict[str, str]:
-        return {"Cookie": f"uin={self.uin}; skey={self.skey}; p_skey={self.p_skey}"}
+        """传给 aiohttp 的 cookies 参数。uin 必须带 o 前缀。"""
+        return {"uin": f"o{self.uin}", "skey": self.skey, "p_skey": self.p_skey}
+
+    @property
+    def headers(self) -> dict[str, str]:
+        return {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/138.0.0.0 Safari/537.36"
+            ),
+            "referer": f"https://user.qzone.qq.com/{self.uin}",
+            "origin": "https://user.qzone.qq.com",
+        }
 
 
 def _calc_gtk(p_skey: str) -> int:
@@ -52,11 +65,15 @@ class QzoneSession:
         uin = _get_cookie_value(raw, "uin") or _get_cookie_value(raw, "p_uin") or ""
         skey = _get_cookie_value(raw, "skey") or ""
         p_skey = _get_cookie_value(raw, "p_skey") or ""
-        if not uin or not p_skey:
+        # QZone cookie 的 uin 带 o 前缀 (如 o2859445368)，存 int
+        if not uin.startswith("o"):
+            raise ValueError(f"Cookie uin 缺少 o 前缀: {uin}")
+        uin_int = int(uin[1:])
+        if not uin_int or not p_skey:
             raise ValueError(
-                f"Cookie 缺少必要字段 (uin / p_skey)。原始: {cookie_str[:80]}..."
+                f"Cookie 缺少必要字段 (uin={uin_int} / p_skey)。原始: {cookie_str[:80]}..."
             )
-        return QzoneContext(uin=uin, skey=skey, p_skey=p_skey)
+        return QzoneContext(uin=uin_int, skey=skey, p_skey=p_skey)
 
 
 def _get_cookie_value(raw: SimpleCookie, key: str) -> Optional[str]:
